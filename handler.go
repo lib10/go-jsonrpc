@@ -74,10 +74,15 @@ func (s *RPCServer) register(namespace string, r interface{}) {
 	val := reflect.ValueOf(r)
 	//TODO: expect ptr
 
-	for i := 0; i < val.NumMethod(); i++ {
-		method := val.Type().Method(i)
+	fieldNum := val.NumField()
+	for i := 0; i < fieldNum; i++ {
+		expFunc := val.Field(i)
+		// only export the function field.
+		if expFunc.Kind() != reflect.Func {
+			continue
+		}
 
-		funcType := method.Func.Type()
+		funcType := expFunc.Type()
 		hasCtx := 0
 		if funcType.NumIn() >= 2 && funcType.In(1) == contextType {
 			hasCtx = 1
@@ -85,17 +90,17 @@ func (s *RPCServer) register(namespace string, r interface{}) {
 
 		ins := funcType.NumIn() - 1 - hasCtx
 		recvs := make([]reflect.Type, ins)
-		for i := 0; i < ins; i++ {
-			recvs[i] = method.Type.In(i + 1 + hasCtx)
+		for n := 0; n < ins; n++ {
+			recvs[i] = funcType.In(n + 1 + hasCtx)
 		}
 
 		valOut, errOut, _ := processFuncOut(funcType)
 
-		s.methods[namespace+"."+method.Name] = rpcHandler{
+		s.methods[namespace+"."+funcType.Name()] = rpcHandler{
 			paramReceivers: recvs,
 			nParams:        ins,
 
-			handlerFunc: method.Func,
+			handlerFunc: expFunc,
 			receiver:    val,
 
 			hasCtx: hasCtx,
