@@ -69,22 +69,52 @@ type response struct {
 }
 
 // Register
+func (s *RPCServer) regMethod(namespace string, val reflect.Value) {
+	for i := 0; i < val.NumMethod(); i++ {
+		method := val.Type().Method(i)
 
-func (s *RPCServer) register(namespace string, r interface{}) {
-	val := reflect.ValueOf(r)
-	//TODO: expect ptr
+		funcType := method.Func.Type()
+		hasCtx := 0
+		if funcType.NumIn() >= 2 && funcType.In(1) == contextType {
+			hasCtx = 1
+		}
 
-	fieldNum := val.NumField()
+		ins := funcType.NumIn() - 1 - hasCtx
+		recvs := make([]reflect.Type, ins)
+		for i := 0; i < ins; i++ {
+			recvs[i] = method.Type.In(i + 1 + hasCtx)
+		}
+
+		valOut, errOut, _ := processFuncOut(funcType)
+
+		s.methods[namespace+"."+method.Name] = rpcHandler{
+			paramReceivers: recvs,
+			nParams:        ins,
+
+			handlerFunc: method.Func,
+			receiver:    val,
+
+			hasCtx: hasCtx,
+
+			errOut: errOut,
+			valOut: valOut,
+		}
+	}
+}
+func (s *RPCServer) regField(namespace string, val reflect.Value) {
+	elem := val.Elem()
+	elemType := elem.Type()
+	fieldNum := elemType.NumField()
 	for i := 0; i < fieldNum; i++ {
-		expFunc := val.Field(i)
+		exportField := elemType.Field(i)
 		// only export the function field.
-		if expFunc.Kind() != reflect.Func {
+		if exportField.Type.Kind() != reflect.Func {
 			continue
 		}
 
-		funcType := expFunc.Type()
+		funcType := exportField.Type
 		hasCtx := 0
-		if funcType.NumIn() >= 2 && funcType.In(1) == contextType {
+		if funcType.NumIn() >= 2 && funcType.In(0) == contextType {
 			hasCtx = 1
 		}
 
@@ -96,11 +126,11 @@ func (s *RPCServer) register(namespace string, r interface{}) {
 
 		valOut, errOut, _ := processFuncOut(funcType)
 
-		s.methods[namespace+"."+funcType.Name()] = rpcHandler{
+		s.methods[namespace+"."+exportField.Name] = rpcHandler{
 			paramReceivers: recvs,
 			nParams:        ins,
 
-			handlerFunc: expFunc,
+			handlerFunc: elem.Field(i),
 			receiver:    val,
 
 			hasCtx: hasCtx,
@@ -109,6 +139,13 @@ func (s *RPCServer) register(namespace string, r interface{}) {
 			valOut: valOut,
 		}
 	}
+
+}
+func (s *RPCServer) register(namespace string, r interface{}) {
+	val := reflect.ValueOf(r)
+
+	s.regMethod(namespace, val)
+	s.regField(namespace, val)
 }
 
 // Handle

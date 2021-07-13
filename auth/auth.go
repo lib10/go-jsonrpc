@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"golang.org/x/xerrors"
@@ -31,15 +32,18 @@ func HasPerm(ctx context.Context, defaultPerms []Permission, perm Permission) bo
 	return false
 }
 
-func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, out interface{}) {
+func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, out interface{}) error {
 	rint := reflect.ValueOf(out).Elem()
 	ra := reflect.ValueOf(in)
 
 	for f := 0; f < rint.NumField(); f++ {
 		field := rint.Type().Field(f)
 		requiredPerm := Permission(field.Tag.Get("perm"))
-		if requiredPerm == "" {
-			panic("missing 'perm' tag on " + field.Name) // ok
+		switch requiredPerm {
+		case "":
+			return errors.New("missing 'perm' tag on " + field.Name) // ok
+		case "-":
+			continue
 		}
 
 		// Validate perm tag
@@ -51,10 +55,13 @@ func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, ou
 			}
 		}
 		if !ok {
-			panic("unknown 'perm' tag on " + field.Name) // ok
+			return errors.New("unknown 'perm' tag on " + field.Name) // ok
 		}
 
 		fn := ra.MethodByName(field.Name)
+		if !fn.IsValid() {
+			return errors.New(field.Name + " is not implemented")
+		}
 
 		rint.Field(f).Set(reflect.MakeFunc(field.Type, func(args []reflect.Value) (results []reflect.Value) {
 			ctx := args[0].Interface().(context.Context)
@@ -76,4 +83,5 @@ func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, ou
 		}))
 
 	}
+	return nil
 }
