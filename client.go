@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -34,6 +35,9 @@ var (
 
 	_defaultHTTPClient = &http.Client{
 		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
 				Timeout:   30 * time.Second,
