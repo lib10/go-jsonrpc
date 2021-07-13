@@ -25,7 +25,8 @@ type rpcHandler struct {
 	nParams        int
 
 	receiver    reflect.Value
-	handlerFunc reflect.Value
+	handlerType reflect.Type
+	handlerFunc func(args []reflect.Value) []reflect.Value
 
 	hasCtx int
 
@@ -91,8 +92,11 @@ func (s *RPCServer) regMethod(namespace string, val reflect.Value) {
 			paramReceivers: recvs,
 			nParams:        ins,
 
-			handlerFunc: method.Func,
-			receiver:    val,
+			handlerType: funcType,
+			handlerFunc: func(args []reflect.Value) []reflect.Value {
+				return method.Func.Call(args)
+			},
+			receiver: val,
 
 			hasCtx: hasCtx,
 
@@ -112,16 +116,17 @@ func (s *RPCServer) regField(namespace string, val reflect.Value) {
 			continue
 		}
 
+		funcVal := elem.Field(i)
 		funcType := exportField.Type
 		hasCtx := 0
-		if funcType.NumIn() >= 2 && funcType.In(0) == contextType {
+		if funcType.NumIn() >= 1 && funcType.In(0) == contextType {
 			hasCtx = 1
 		}
 
-		ins := funcType.NumIn() - 1 - hasCtx
+		ins := funcType.NumIn() - hasCtx
 		recvs := make([]reflect.Type, ins)
 		for n := 0; n < ins; n++ {
-			recvs[i] = funcType.In(n + 1 + hasCtx)
+			recvs[n] = funcType.In(n + hasCtx)
 		}
 
 		valOut, errOut, _ := processFuncOut(funcType)
@@ -130,8 +135,12 @@ func (s *RPCServer) regField(namespace string, val reflect.Value) {
 			paramReceivers: recvs,
 			nParams:        ins,
 
-			handlerFunc: elem.Field(i),
-			receiver:    val,
+			handlerType: funcType,
+			handlerFunc: func(args []reflect.Value) []reflect.Value {
+				// thie args[0] is the receiver
+				return funcVal.Call(args[1:])
+			},
+			receiver: val,
 
 			hasCtx: hasCtx,
 
@@ -193,7 +202,7 @@ func (s *RPCServer) handleReader(ctx context.Context, r io.Reader, w io.Writer, 
 	s.handle(ctx, req, wf, rpcError, func(bool) {}, nil)
 }
 
-func doCall(methodName string, f reflect.Value, params []reflect.Value) (out []reflect.Value, err error) {
+func doCall(methodName string, f func(args []reflect.Value) []reflect.Value, params []reflect.Value) (out []reflect.Value, err error) {
 	defer func() {
 		if i := recover(); i != nil {
 			err = xerrors.Errorf("panic in rpc method '%s': %s", methodName, i)
@@ -201,7 +210,7 @@ func doCall(methodName string, f reflect.Value, params []reflect.Value) (out []r
 		}
 	}()
 
-	out = f.Call(params)
+	out = f(params)
 	return out, nil
 }
 
@@ -255,7 +264,7 @@ func (s *RPCServer) handle(ctx context.Context, req request, w func(func(io.Writ
 		return
 	}
 
-	outCh := handler.valOut != -1 && handler.handlerFunc.Type().Out(handler.valOut).Kind() == reflect.Chan
+	outCh := handler.valOut != -1 && handler.handlerType.Out(handler.valOut).Kind() == reflect.Chan
 	defer done(outCh)
 
 	if chOut == nil && outCh {

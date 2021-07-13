@@ -9,9 +9,9 @@ import (
 )
 
 type TestAuthPerm struct {
-	Ignore     func(ctx context.Context) error               `perm:"-"`
-	AuthNew    func(ctx context.Context) error               `perm:"admin"`
-	AuthVerify func(ctx context.Context, token string) error `perm:"read"`
+	Ignore     func(ctx context.Context) error                `perm:"-"`
+	AuthNew    func(ctx context.Context, perm []string) error `perm:"admin"`
+	AuthVerify func(ctx context.Context, token string) error  `perm:"read"`
 }
 
 // example for out of the perm control.
@@ -22,7 +22,7 @@ func (t *TestAuthPerm) Outside(ctx context.Context, p1 string) error {
 type TestAuthImpl struct {
 }
 
-func (impl *TestAuthImpl) AuthNew(ctx context.Context) error {
+func (impl *TestAuthImpl) AuthNew(ctx context.Context, perm []string) error {
 	// nothing to do
 	return nil
 }
