@@ -114,6 +114,9 @@ func httpClient(ctx context.Context, addr string, namespace string, outs []inter
 		namespace:     namespace,
 		paramEncoders: config.paramEncoders,
 	}
+	if err := c.provide(outs); err != nil {
+		return nil, err
+	}
 
 	stop := make(chan struct{})
 	c.exiting = stop
@@ -160,10 +163,6 @@ func httpClient(ctx context.Context, addr string, namespace string, outs []inter
 		return resp, nil
 	}
 
-	if err := c.provide(outs); err != nil {
-		return nil, err
-	}
-
 	return func() {
 		close(stop)
 	}, nil
@@ -196,6 +195,9 @@ func websocketClient(ctx context.Context, addr string, namespace string, outs []
 	c := client{
 		namespace:     namespace,
 		paramEncoders: config.paramEncoders,
+	}
+	if err := c.provide(outs); err != nil {
+		return nil, err
 	}
 
 	requests := make(chan clientRequest)
@@ -257,10 +259,6 @@ func websocketClient(ctx context.Context, addr string, namespace string, outs []
 		stop:             stop,
 		exiting:          exiting,
 	}).handleWsConn(ctx)
-
-	if err := c.provide(outs); err != nil {
-		return nil, err
-	}
 
 	return func() {
 		close(stop)

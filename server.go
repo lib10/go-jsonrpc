@@ -73,7 +73,8 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 	}).handleWsConn(ctx)
 
 	if err := c.Close(); err != nil {
-		log.Error(err)
+		// ignore deal this error
+		//log.Error(err)
 		return
 	}
 }
