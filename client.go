@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -32,26 +31,6 @@ var (
 	contextType = reflect.TypeOf(new(context.Context)).Elem()
 
 	log = logging.Logger("rpc")
-
-	_defaultHTTPClient = &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			MaxIdleConnsPerHost:   100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
-	}
 )
 
 // ErrClient is an error which occurred on the client side the library
@@ -162,7 +141,7 @@ func httpClient(ctx context.Context, addr string, namespace string, outs []inter
 
 		hreq.Header.Set("Content-Type", "application/json")
 
-		httpResp, err := _defaultHTTPClient.Do(hreq)
+		httpResp, err := config.NewHttpClient().Do(hreq)
 		if err != nil {
 			return clientResponse{}, err
 		}
@@ -194,7 +173,7 @@ func websocketClient(ctx context.Context, addr string, namespace string, outs []
 	connFactory := func() (*websocket.Conn, error) {
 		dialer := websocket.DefaultDialer
 		dialer.TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: config.Insecure,
 		}
 		conn, _, err := dialer.Dial(addr, requestHeader)
 		return conn, err

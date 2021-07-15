@@ -1,6 +1,9 @@
 package jsonrpc
 
 import (
+	"crypto/tls"
+	"net"
+	"net/http"
 	"reflect"
 	"time"
 
@@ -10,6 +13,8 @@ import (
 type ParamEncoder func(reflect.Value) (reflect.Value, error)
 
 type Config struct {
+	Insecure bool
+
 	reconnectBackoff backoff
 	pingInterval     time.Duration
 	timeout          time.Duration
@@ -18,6 +23,28 @@ type Config struct {
 
 	noReconnect      bool
 	proxyConnFactory func(func() (*websocket.Conn, error)) func() (*websocket.Conn, error) // for testing
+}
+
+func (c *Config) NewHttpClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: c.Insecure,
+			},
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
 }
 
 func defaultConfig() Config {
