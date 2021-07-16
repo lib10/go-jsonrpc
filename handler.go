@@ -137,7 +137,8 @@ func (s *RPCServer) regField(namespace string, val reflect.Value) {
 
 			handlerType: funcType,
 			handlerFunc: func(args []reflect.Value) []reflect.Value {
-				// thie args[0] is the receiver
+				// the args[0] is the receiver
+				// but in the struct field, the func field no receiver parameter need.
 				return funcVal.Call(args[1:])
 			},
 			receiver: val,
