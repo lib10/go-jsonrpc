@@ -16,7 +16,7 @@ type TestAuthPerm struct {
 	Ignore     func(ctx context.Context) error                               `perm:"-"`
 	AuthVerify func(ctx context.Context, token string) ([]Permission, error) `perm:"read"`
 
-	// function call testing
+	// test rpc function
 	Add     func(ctx context.Context, a, b int) (int, error) `perm:"admin"`
 	Todo    func(ctx context.Context) error                  `perm:"admin"`
 	ChanSub func(ctx context.Context) (<-chan bool, error)   `perm:"admin"`
