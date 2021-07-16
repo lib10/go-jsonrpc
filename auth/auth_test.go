@@ -85,43 +85,47 @@ func TestAuthProxy(t *testing.T) {
 	testServ := httptest.NewTLSServer(m)
 	defer testServ.Close()
 
-	client := &TestAuthPerm{}
-	headers := http.Header{}
-	headers.Add("Authorization", "Bearer "+"todo")
-	closer, err := jsonrpc.NewMergeClient(ctx, "wss://"+testServ.Listener.Addr().String()+"/rpc",
-		"Testing",
-		[]interface{}{client}, headers,
-		func(c *jsonrpc.Config) {
-			c.Insecure = true
-		},
-	)
-	defer closer()
+	for _, proto := range []string{"wss://", "https://"} {
+		client := &TestAuthPerm{}
+		headers := http.Header{}
+		headers.Add("Authorization", "Bearer "+"todo")
+		closer, err := jsonrpc.NewMergeClient(ctx, proto+testServ.Listener.Addr().String()+"/rpc",
+			"Testing",
+			[]interface{}{client}, headers,
+			func(c *jsonrpc.Config) {
+				c.Insecure = true
+			},
+		)
+		defer closer()
 
-	added, err := client.Add(ctx, 1, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if added != 3 {
-		t.Fatalf("expect 3, but:%d", added)
-	}
-
-	if err := client.Todo(ctx); err == nil {
-		t.Fatal("expect error")
-	} else if err.Error() != "TODO" {
-		t.Fatal("expect 'TODO' error")
-	}
-
-	ch, err := client.ChanSub(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case res := <-ch:
-		if !res {
-			t.Fatal("expect true")
+		added, err := client.Add(ctx, 1, 2)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("expect chan not empty")
-	}
+		if added != 3 {
+			t.Fatalf("expect 3, but:%d", added)
+		}
 
+		if err := client.Todo(ctx); err == nil {
+			t.Fatal("expect error")
+		} else if err.Error() != "TODO" {
+			t.Fatal("expect 'TODO' error")
+		}
+
+		// only support websocket mode
+		if proto == "wss://" {
+			ch, err := client.ChanSub(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case res := <-ch:
+				if !res {
+					t.Fatal("expect true")
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("expect chan not empty")
+			}
+		}
+	}
 }
