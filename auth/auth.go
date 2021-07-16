@@ -31,8 +31,13 @@ func HasPerm(ctx context.Context, defaultPerms []Permission, perm Permission) bo
 	}
 	return false
 }
+func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, out interface{}) {
+	if err := ReflectPerm(validPerms, defaultPerms, in, out); err != nil {
+		panic(err)
+	}
+}
 
-func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, out interface{}) error {
+func ReflectPerm(validPerms, defaultPerms []Permission, in interface{}, out interface{}) error {
 	rint := reflect.ValueOf(out).Elem()
 	ra := reflect.ValueOf(in)
 

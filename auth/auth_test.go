@@ -14,7 +14,7 @@ type TestAuthPerm struct {
 	AuthVerify func(ctx context.Context, token string) error  `perm:"read"`
 }
 
-// example for out of the perm control.
+// Example for out of the perm control.
 func (t *TestAuthPerm) Outside(ctx context.Context, p1 string) error {
 	return errors.New("TODO")
 }
@@ -23,17 +23,17 @@ type TestAuthImpl struct {
 }
 
 func (impl *TestAuthImpl) AuthNew(ctx context.Context, perm []string) error {
-	// nothing to do
+	// nothing to do for testing
 	return nil
 }
 
 func (impl *TestAuthImpl) AuthVerify(ctx context.Context) error {
-	// nothing to do
+	// nothing to do for testing
 	return nil
 }
 
 //func (impl *TestAuthImpl) Outside(ctx context.Context, p1 string) error {
-//	// nothing to do
+// nothing to do for testing
 //	return nil
 //}
 
@@ -44,11 +44,11 @@ func TestAuthProxy(t *testing.T) {
 	inst := &TestAuthImpl{}
 	perm := &TestAuthPerm{}
 
-	if err := PermissionedProxy(allPerm, defPerm, inst, perm); err != nil {
+	if err := ReflectPerm(allPerm, defPerm, inst, perm); err != nil {
 		t.Fatal(err)
 	}
 
-	// TODO: register to rpc
+	// try register to the rpc
 	rpcServer := jsonrpc.NewServer()
 	rpcServer.Register("Testing", perm)
 }
