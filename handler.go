@@ -106,13 +106,25 @@ func (s *RPCServer) regMethod(namespace string, val reflect.Value) {
 	}
 }
 func (s *RPCServer) regField(namespace string, val reflect.Value) {
-	elem := val.Elem()
+	elem := val
+	if elem.Kind() == reflect.Ptr {
+		elem = val.Elem()
+	}
 	elemType := elem.Type()
 	fieldNum := elemType.NumField()
+	hasEmbeds := false
 	for i := 0; i < fieldNum; i++ {
 		exportField := elemType.Field(i)
+		if exportField.Anonymous {
+			hasEmbeds = true
+			continue
+		}
 		// only export the function field.
 		if exportField.Type.Kind() != reflect.Func {
+			continue
+		}
+		exportName := namespace + "." + exportField.Name
+		if _, ok := s.methods[exportName]; ok {
 			continue
 		}
 
@@ -130,8 +142,7 @@ func (s *RPCServer) regField(namespace string, val reflect.Value) {
 		}
 
 		valOut, errOut, _ := processFuncOut(funcType)
-
-		s.methods[namespace+"."+exportField.Name] = rpcHandler{
+		s.methods[exportName] = rpcHandler{
 			paramReceivers: recvs,
 			nParams:        ins,
 
@@ -150,6 +161,17 @@ func (s *RPCServer) regField(namespace string, val reflect.Value) {
 		}
 	}
 
+	if !hasEmbeds {
+		return
+	}
+
+	for i := 0; i < fieldNum; i++ {
+		exportField := elemType.Field(i)
+		if !exportField.Anonymous {
+			continue
+		}
+		s.regField(namespace, elem.Field(i))
+	}
 }
 func (s *RPCServer) register(namespace string, r interface{}) {
 	val := reflect.ValueOf(r)

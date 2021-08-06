@@ -27,7 +27,18 @@ func (t *TestAuthPerm) Outside(ctx context.Context, p1 string) error {
 	return errors.New("TODO")
 }
 
+type TestAuthEmbed struct {
+	*TestAuthPerm
+}
+type TestAuthNoEmbed struct {
+	TestAuthPerm *TestAuthPerm
+}
+
 type TestAuthImpl struct {
+}
+
+type TestAuthImplEmbed struct {
+	*TestAuthImpl
 }
 
 func (impl *TestAuthImpl) AuthVerify(ctx context.Context, token string) ([]Permission, error) {
@@ -56,17 +67,14 @@ func TestAuthProxy(t *testing.T) {
 	allPerm := []Permission{"admin", "read"}
 	defPerm := []Permission{"read"}
 
-	inst := &TestAuthImpl{}
-	perm := &TestAuthPerm{}
-
-	// testing implement
-	if err := ReflectPerm(allPerm, defPerm, inst, perm); err != nil {
+	// test implement
+	if err := ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthPerm{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// testing unimplement
+	// test unimplement
 	emptyStruct := struct{}{}
-	err := ReflectPerm(allPerm, defPerm, &emptyStruct, perm)
+	err := ReflectPerm(allPerm, defPerm, &emptyStruct, &TestAuthPerm{})
 	if err == nil {
 		t.Fatal("expect implement error")
 	}
@@ -74,19 +82,48 @@ func TestAuthProxy(t *testing.T) {
 		t.Fatal("expect 'is not implemented' error")
 	}
 
+	// test embed
+	if err := ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthEmbed{&TestAuthPerm{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReflectPerm(allPerm, defPerm, &TestAuthImplEmbed{&TestAuthImpl{}}, &TestAuthEmbed{&TestAuthPerm{}}); err != nil {
+		t.Fatal(err)
+	}
+	// test no embed
+	err = ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthNoEmbed{&TestAuthPerm{}})
+	if err == nil {
+		t.Fatal("expect error for no tag")
+	}
+	if strings.Index(err.Error(), "missing 'perm' tag") < 0 {
+		t.Fatalf("expect missing 'perm' tag, but %s", err.Error())
+	}
+
 	// testing rpc
 	ctx := context.TODO()
+	//exportApi := &TestAuthPerm{}
+	exportApi := &TestAuthEmbed{&TestAuthPerm{}}
+	//exportInst := &TestAuthImpl{}
+	exportInst := &TestAuthImplEmbed{&TestAuthImpl{}}
+
 	rpcServer := jsonrpc.NewServer()
-	rpcServer.Register("Testing", perm)
+
+	// Associate instance and template for rpc server
+	if err := ReflectPerm(allPerm, defPerm, exportInst, exportApi); err != nil {
+		t.Fatal(err)
+	}
+	// register the exportApi to rpc server
+	rpcServer.Register("Testing", exportApi)
+
 	m := http.NewServeMux()
-	handler := &Handler{Verify: inst.AuthVerify, Next: rpcServer.ServeHTTP}
+	handler := &Handler{Verify: exportInst.AuthVerify, Next: rpcServer.ServeHTTP}
 	m.Handle("/rpc", handler)
 
 	testServ := httptest.NewTLSServer(m)
 	defer testServ.Close()
 
 	for _, proto := range []string{"wss://", "https://"} {
-		client := &TestAuthPerm{}
+		//client := &TestAuthPerm{}
+		client := &TestAuthEmbed{&TestAuthPerm{}}
 		headers := http.Header{}
 		headers.Add("Authorization", "Bearer "+"todo")
 		closer, err := jsonrpc.NewMergeClient(ctx, proto+testServ.Listener.Addr().String()+"/rpc",
