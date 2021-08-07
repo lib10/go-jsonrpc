@@ -29,16 +29,14 @@ func (t *TestAuthPerm) Outside(ctx context.Context, p1 string) error {
 
 type TestAuthEmbed struct {
 	*TestAuthPerm
+	Todo  func(ctx context.Context) error `perm:"admin"` // replace
+	Todo1 func(ctx context.Context) error `perm:"admin"` // new implement
 }
 type TestAuthNoEmbed struct {
 	TestAuthPerm *TestAuthPerm
 }
 
 type TestAuthImpl struct {
-}
-
-type TestAuthImplEmbed struct {
-	*TestAuthImpl
 }
 
 func (impl *TestAuthImpl) AuthVerify(ctx context.Context, token string) ([]Permission, error) {
@@ -63,6 +61,17 @@ func (impl *TestAuthImpl) ChanSub(ctx context.Context) (<-chan bool, error) {
 	return ch, nil
 }
 
+type TestAuthImplEmbed struct {
+	*TestAuthImpl
+}
+
+func (impl *TestAuthImplEmbed) Todo(ctx context.Context) error {
+	return errors.New("REPLACED")
+}
+func (impl *TestAuthImplEmbed) Todo1(ctx context.Context) error {
+	return errors.New("TODO")
+}
+
 func TestAuthProxy(t *testing.T) {
 	allPerm := []Permission{"admin", "read"}
 	defPerm := []Permission{"read"}
@@ -83,14 +92,11 @@ func TestAuthProxy(t *testing.T) {
 	}
 
 	// test embed
-	if err := ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthEmbed{&TestAuthPerm{}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ReflectPerm(allPerm, defPerm, &TestAuthImplEmbed{&TestAuthImpl{}}, &TestAuthEmbed{&TestAuthPerm{}}); err != nil {
+	if err := ReflectPerm(allPerm, defPerm, &TestAuthImplEmbed{TestAuthImpl: &TestAuthImpl{}}, &TestAuthEmbed{TestAuthPerm: &TestAuthPerm{}}); err != nil {
 		t.Fatal(err)
 	}
 	// test no embed
-	err = ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthNoEmbed{&TestAuthPerm{}})
+	err = ReflectPerm(allPerm, defPerm, &TestAuthImpl{}, &TestAuthNoEmbed{TestAuthPerm: &TestAuthPerm{}})
 	if err == nil {
 		t.Fatal("expect error for no tag")
 	}
@@ -101,9 +107,9 @@ func TestAuthProxy(t *testing.T) {
 	// testing rpc
 	ctx := context.TODO()
 	//exportApi := &TestAuthPerm{}
-	exportApi := &TestAuthEmbed{&TestAuthPerm{}}
+	exportApi := &TestAuthEmbed{TestAuthPerm: &TestAuthPerm{}}
 	//exportInst := &TestAuthImpl{}
-	exportInst := &TestAuthImplEmbed{&TestAuthImpl{}}
+	exportInst := &TestAuthImplEmbed{TestAuthImpl: &TestAuthImpl{}}
 
 	rpcServer := jsonrpc.NewServer()
 
@@ -123,7 +129,7 @@ func TestAuthProxy(t *testing.T) {
 
 	for _, proto := range []string{"wss://", "https://"} {
 		//client := &TestAuthPerm{}
-		client := &TestAuthEmbed{&TestAuthPerm{}}
+		client := &TestAuthEmbed{TestAuthPerm: &TestAuthPerm{}}
 		headers := http.Header{}
 		headers.Add("Authorization", "Bearer "+"todo")
 		closer, err := jsonrpc.NewMergeClient(ctx, proto+testServ.Listener.Addr().String()+"/rpc",
@@ -145,8 +151,14 @@ func TestAuthProxy(t *testing.T) {
 
 		if err := client.Todo(ctx); err == nil {
 			t.Fatal("expect error")
+		} else if err.Error() != "REPLACED" {
+			t.Fatal("expect 'REPLACED' error, but " + err.Error())
+		}
+
+		if err := client.Todo1(ctx); err == nil {
+			t.Fatal("expect error")
 		} else if err.Error() != "TODO" {
-			t.Fatal("expect 'TODO' error")
+			t.Fatal("expect 'TODO' error, but " + err.Error())
 		}
 
 		// only support websocket mode
