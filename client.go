@@ -279,13 +279,31 @@ func (c *client) provide(outs []interface{}) error {
 
 		val := reflect.ValueOf(handler)
 
+		hasEmbed := false
 		for i := 0; i < typ.NumField(); i++ {
-			fn, err := c.makeRpcFunc(typ.Field(i))
+			field := typ.Field(i)
+			if field.Anonymous {
+				hasEmbed = true
+				continue
+			}
+			fn, err := c.makeRpcFunc(field)
 			if err != nil {
 				return err
 			}
 
 			val.Elem().Field(i).Set(fn)
+		}
+		if !hasEmbed {
+			continue
+		}
+		for i := 0; i < typ.NumField(); i++ {
+			field := typ.Field(i)
+			if !field.Anonymous {
+				continue
+			}
+			if err := c.provide([]interface{}{val.Elem().Field(i).Interface()}); err != nil {
+				return err
+			}
 		}
 	}
 

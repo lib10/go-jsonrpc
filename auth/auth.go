@@ -38,11 +38,17 @@ func PermissionedProxy(validPerms, defaultPerms []Permission, in interface{}, ou
 }
 
 func ReflectPerm(validPerms, defaultPerms []Permission, in interface{}, out interface{}) error {
-	rint := reflect.ValueOf(out).Elem()
-	ra := reflect.ValueOf(in)
+	rint := reflect.ValueOf(out).Elem() // export
+	ra := reflect.ValueOf(in)           // instance
 
+	hasEmbeds := false
 	for f := 0; f < rint.NumField(); f++ {
 		field := rint.Type().Field(f)
+		if field.Anonymous {
+			hasEmbeds = true
+			continue
+		}
+
 		requiredPerm := Permission(field.Tag.Get("perm"))
 		switch requiredPerm {
 		case "":
@@ -87,6 +93,19 @@ func ReflectPerm(validPerms, defaultPerms []Permission, in interface{}, out inte
 			}
 		}))
 
+	}
+	if !hasEmbeds {
+		return nil
+	}
+
+	for f := 0; f < rint.NumField(); f++ {
+		field := rint.Type().Field(f)
+		if !field.Anonymous {
+			continue
+		}
+		if err := ReflectPerm(validPerms, defaultPerms, in, rint.Field(f).Interface()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
